@@ -1,0 +1,5 @@
+text,label
+"Your account has been suspended. Click here to verify your identity.","phishing"
+"We noticed a login from a new device, if this was not you, please reset your password.","phishing"
+"Your Amazon order #12345 has shipped and will arrive tomorrow.","legitimate"
+"Your class registration is confirmed for Spring 2025.","legitimate"

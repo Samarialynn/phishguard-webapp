@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PhishGuard</title>
+
+<style>
+:root {
+  --email: linear-gradient(90deg,#2563eb,#06b6d4);
+  --sms: linear-gradient(90deg,#7c3aed,#c084fc);
+  --link: linear-gradient(90deg,#f97316,#fbbf24);
+}
+
+body {
+  margin: 0;
+  padding: 45px 20px;
+  background: linear-gradient(135deg,#eef2ff,#ffffff);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+  display: flex;
+  justify-content: center;
+}
+
+.wrapper {
+  max-width: 1200px;
+  width: 100%;
+  background: white;
+  border-radius: 28px;
+  padding: 40px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.15);
+}
+
+h1 {
+  font-size: 38px;
+  font-weight: 900;
+  background: var(--email);
+  -webkit-background-clip: text;
+  color: transparent;
+  text-align: center;
+}
+
+.subtitle {
+  text-align: center;
+  color: #6b7280;
+  margin-bottom: 30px;
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.tab {
+  padding: 12px 26px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  font-weight: 700;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.tab.active {
+  color: white;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+@media(max-width:900px){
+  .grid { grid-template-columns:1fr }
+}
+
+textarea, input {
+  width: 100%;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid #d1d5db;
+  font-size: 15px;
+}
+
+textarea {
+  height: 240px;
+  resize: none;
+}
+
+.btn {
+  margin-top: 18px;
+  width: 100%;
+  padding: 16px;
+  border-radius: 18px;
+  border: none;
+  font-size: 17px;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+}
+
+.result {
+  background: #f9fafb;
+  border-radius: 22px;
+  padding: 26px;
+  border: 1px solid #e5e7eb;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: .4s;
+}
+
+.result.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+}
+
+.gauge-bg {
+  height: 16px;
+  background: #e5e7eb;
+  border-radius: 20px;
+  margin-top: 12px;
+}
+
+.gauge-fill {
+  height: 16px;
+  width: 0%;
+  border-radius: 20px;
+  transition: width .7s;
+}
+</style>
+</head>
+
+<body>
+<div class="wrapper">
+  <h1 id="title">PhishGuard</h1>
+  <p class="subtitle">Email, SMS & Link Phishing Detection</p>
+
+  <div class="tabs">
+    <div class="tab active" id="emailTab">Email</div>
+    <div class="tab" id="smsTab">SMS</div>
+    <div class="tab" id="linkTab">Link</div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <h2 id="modeTitle">Email Detection</h2>
+
+      <input id="linkInput" style="display:none" placeholder="Paste suspicious URL here..." />
+      <textarea id="inputText" placeholder="Paste email content here..."></textarea>
+
+      <button class="btn" id="detectBtn">Analyze</button>
+    </div>
+
+    <div class="result" id="result">
+      <h3>Detection Result <span class="badge" id="source">—</span></h3>
+      <p><strong>Status:</strong> <span id="label">—</span></p>
+      <p><strong>Confidence:</strong> <span id="conf">—</span></p>
+
+      <div class="gauge-bg">
+        <div class="gauge-fill" id="confBar"></div>
+      </div>
+
+      <div id="reasonsBox" style="margin-top:14px;font-size:14px;color:#374151;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://127.0.0.1:9000";
+const $ = id => document.getElementById(id);
+let mode = "email";
+
+const THEMES = {
+  email: getComputedStyle(document.documentElement).getPropertyValue("--email"),
+  sms: getComputedStyle(document.documentElement).getPropertyValue("--sms"),
+  link: getComputedStyle(document.documentElement).getPropertyValue("--link")
+};
+
+function setTheme(m) {
+  $("title").style.background = THEMES[m];
+  $("title").style.webkitBackgroundClip = "text";
+  $("detectBtn").style.background = THEMES[m];
+  $("confBar").style.background = THEMES[m];
+  $("source").style.background = THEMES[m];
+
+  ["email","sms","link"].forEach(t=>{
+    $(t+"Tab").classList.remove("active");
+    $(t+"Tab").style.background = "#e5e7eb";
+  });
+
+  $(m+"Tab").classList.add("active");
+  $(m+"Tab").style.background = THEMES[m];
+}
+
+setTheme("email");
+
+$("emailTab").onclick = () => {
+  mode="email"; setTheme("email");
+  $("modeTitle").innerText="Email Detection";
+  $("linkInput").style.display="none";
+  $("inputText").style.display="block";
+};
+
+$("smsTab").onclick = () => {
+  mode="sms"; setTheme("sms");
+  $("modeTitle").innerText="SMS Detection";
+  $("linkInput").style.display="none";
+  $("inputText").style.display="block";
+};
+
+$("linkTab").onclick = () => {
+  mode="link"; setTheme("link");
+  $("modeTitle").innerText="Link Detection";
+  $("inputText").style.display="none";
+  $("linkInput").style.display="block";
+};
+
+$("detectBtn").onclick = async () => {
+  let payload = { mode };
+  if(mode==="link"){
+    if(!$("linkInput").value.trim()) return alert("Paste a link");
+    payload.url=$("linkInput").value.trim();
+  } else {
+    if(!$("inputText").value.trim()) return alert("Paste content");
+    payload.text=$("inputText").value.trim();
+  }
+
+  try {
+    const r = await fetch(API_BASE+"/api/predict",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    const d = await r.json();
+
+    $("label").innerText=d.label;
+    $("conf").innerText=(d.confidence*100).toFixed(1)+"%";
+    $("confBar").style.width=(d.confidence*100)+"%";
+    $("source").innerText=d.source || "—";
+    $("reasonsBox").innerHTML=(d.reasons||[]).map(x=>"• "+x).join("<br>");
+    $("result").classList.add("visible");
+  } catch {
+    alert("Backend not running");
+  }
+};
+</script>
+</body>
+</html>
