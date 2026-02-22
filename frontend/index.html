@@ -226,9 +226,10 @@ $("linkTab").onclick = () => {
 
 $("detectBtn").onclick = async () => {
   let payload = { mode };
+
   if(mode==="link"){
     if(!$("linkInput").value.trim()) return alert("Paste a link");
-    payload.url=$("linkInput").value.trim();
+    payload.text=$("linkInput").value.trim();   // ← FIXED HERE
   } else {
     if(!$("inputText").value.trim()) return alert("Paste content");
     payload.text=$("inputText").value.trim();
