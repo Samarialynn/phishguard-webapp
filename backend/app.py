@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pathlib import Path
 import re
+import datetime
 
 try:
     from joblib import load
@@ -11,7 +12,7 @@ except Exception:
 
 app = FastAPI()
 
-# CORS (allow frontend access)
+# Allow frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,9 +35,9 @@ class PredictIn(BaseModel):
     mode: str = Field("email")
 
 
-# =========================
-# HEURISTIC DETECTION LOGIC
-# =========================
+# ==========================================
+# ADVANCED HEURISTIC PHISHING DETECTION
+# ==========================================
 def extract_signals(text: str):
     t = (text or "").lower()
     reasons = []
@@ -45,60 +46,72 @@ def extract_signals(text: str):
     # URL detection
     urls = re.findall(r"(https?://\S+|www\.\S+)", text, flags=re.IGNORECASE)
     if urls:
-        score += 0.20
+        score += 0.25
         reasons.append(f"Contains link(s): {min(len(urls),3)} detected.")
 
-    # Brand impersonation + login language
-    if re.search(r"(paypal|bank|amazon|apple|microsoft).*(verify|login|secure|account)", t):
-        score += 0.35
-        reasons.append("Impersonates trusted brand with login/verify language.")
-
-    # Multiple hyphens (very common phishing trick)
-    if text.count("-") >= 2:
-        score += 0.15
-        reasons.append("Domain contains multiple hyphens (common phishing pattern).")
+    # Brand impersonation + login/update language
+    if re.search(r"(paypal|bank|amazon|apple|microsoft|netflix|chase|wellsfargo)", t):
+        if re.search(r"(verify|login|secure|account|update|confirm)", t):
+            score += 0.40
+            reasons.append("Impersonates trusted brand with login/verify language.")
 
     # Suspicious TLD
-    if re.search(r"\.(ru|cn|tk|ml|top|xyz)$", t):
-        score += 0.20
+    if re.search(r"\.(ru|cn|tk|ml|top|xyz|click|gq|work)$", t):
+        score += 0.25
         reasons.append("Suspicious top-level domain.")
 
-    # Urgency / fear tactics
+    # Multiple hyphens (common phishing domain pattern)
+    if text.count("-") >= 2:
+        score += 0.20
+        reasons.append("Domain contains multiple hyphens (common phishing pattern).")
+
+    # Urgency / time pressure
     urgency = [
-        "urgent", "immediately", "act now", "account suspended",
-        "locked", "final notice", "verify now", "limited time"
+        "urgent", "immediately", "act now",
+        "before it expires", "limited time",
+        "final notice", "suspended", "locked"
     ]
     if any(u in t for u in urgency):
-        score += 0.25
-        reasons.append("Uses urgency or threat language.")
+        score += 0.30
+        reasons.append("Uses urgency or time-pressure language.")
 
-    # Credential / money request
+    # Credential / payment language
     creds = [
-        "password", "verify", "login", "sign in", "reset",
-        "bank", "invoice", "payment", "gift card", "crypto"
+        "password", "verify", "login", "sign in",
+        "bank", "invoice", "payment", "gift card",
+        "confirm identity", "update billing"
     ]
     if any(c in t for c in creds):
-        score += 0.25
-        reasons.append("Asks for credentials or money-related action.")
+        score += 0.30
+        reasons.append("Requests sensitive credentials or financial action.")
+
+    # Crypto scam detection
+    if re.search(r"(btc|bitcoin|crypto|eth|usdt)", t):
+        score += 0.35
+        reasons.append("Mentions cryptocurrency reward (common scam pattern).")
+
+    # Monetary lure ($ amounts)
+    if re.search(r"\$\d+", t):
+        score += 0.30
+        reasons.append("Contains monetary incentive.")
 
     # Reward bait
-    bait = ["you won", "prize", "free", "reward", "claim", "congratulations"]
+    bait = [
+        "you won", "prize", "free",
+        "reward", "claim", "congratulations",
+        "selected to receive"
+    ]
     if any(b in t for b in bait):
-        score += 0.15
+        score += 0.30
         reasons.append("Contains reward/prize bait language.")
-
-    # Social engineering cues
-    if "reply-to" in t or "sent from my iphone" in t:
-        score += 0.05
-        reasons.append("Contains common social-engineering sender cues.")
 
     score = min(score, 0.95)
     return score, reasons, urls[:10]
 
 
-# =========================
-# ML MODEL PREDICTION
-# =========================
+# ==========================================
+# ML MODEL SUPPORT (optional)
+# ==========================================
 def ml_predict_proba(text: str):
     if not vectorizer or not classifier:
         return None
@@ -113,9 +126,9 @@ def ml_predict_proba(text: str):
     return float(max(proba))
 
 
-# =========================
-# LOAD MODELS ON STARTUP
-# =========================
+# ==========================================
+# LOAD ML MODELS
+# ==========================================
 @app.on_event("startup")
 def load_models():
     global vectorizer, classifier
@@ -124,9 +137,9 @@ def load_models():
         classifier = load(CLF_PATH)
 
 
-# =========================
+# ==========================================
 # HEALTH CHECK
-# =========================
+# ==========================================
 @app.get("/api/health")
 def health():
     return {
@@ -135,9 +148,9 @@ def health():
     }
 
 
-# =========================
+# ==========================================
 # MAIN PREDICTION ENDPOINT
-# =========================
+# ==========================================
 @app.post("/api/predict")
 def predict(payload: PredictIn):
     text = payload.text.strip()
@@ -147,12 +160,25 @@ def predict(payload: PredictIn):
 
     if p_ml is None:
         confidence = h_score
-        label = "phishing" if confidence >= 0.5 else "legitimate"
         source = "heuristic"
     else:
-        confidence = min(0.85 * p_ml + 0.15 * h_score, 1.0)
-        label = "phishing" if confidence >= 0.5 else "legitimate"
+        confidence = min(0.80 * p_ml + 0.20 * h_score, 1.0)
         source = "ml+heuristic"
+
+    # Boost SMS sensitivity slightly
+    if payload.mode == "sms":
+        confidence = min(confidence + 0.05, 1.0)
+
+    # Lower threshold for better real-world detection
+    label = "phishing" if confidence >= 0.40 else "legitimate"
+
+    # Log detection (for realism)
+    print({
+        "timestamp": str(datetime.datetime.utcnow()),
+        "mode": payload.mode,
+        "confidence": confidence,
+        "label": label
+    })
 
     return {
         "label": label,
